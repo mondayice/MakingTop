@@ -91,37 +91,11 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **Apple 风格窗口**：无边框圆角 + 柔和投影 + 卡片分组 + Apple 开关（150ms ease-out）+ 打开淡入缩放动画；控件库见 `Controls.xaml`
 - **自动化自检**：`MakingTop.exe --selftest` 会把当前前台窗口置顶 3 秒并校验悬浮图标真实创建，结果写入 `%TEMP%\MakingTop-selftest.log`（退出码 0=通过），随后自动还原并退出
 
-## 目录结构
+## 许可证
 
-```
-MakingTop/
-├── MakingTop.csproj           # net8.0-windows, UseWPF
-├── app.manifest               # 管理员权限 + PerMonitorV2 DPI 声明
-├── Assets/app.ico             # 程序图标（多尺寸，嵌入 exe）
-├── LICENSE                    # 版权声明
-├── App.xaml / App.xaml.cs     # 入口：单实例、服务组装、退出流程
-├── Theme.xaml                 # Notion 暖橙色板 + 托盘菜单样式
-├── NativeMethods.cs           # Win32 P/Invoke 声明
-├── IconFactory.cs             # 图钉几何 → 托盘 HICON / 选择光标 HCURSOR
-├── TrayIconService.cs         # 托盘图标 + 回调窗口 + Explorer 重启恢复
-├── TrayContextMenu.xaml(.cs)  # Notion 风格托盘右键菜单
-├── PinManager.cs              # 置顶注册表 + WinEvent 事件驱动跟随 + z 序维护
-├── PinOverlayWindow.xaml(.cs) # 24×24 悬浮图钉窗口
-├── SelectionService.cs        # 选择模式：LL 钩子 + 图钉光标
-├── AppSettings.cs             # 设置 JSON 持久化（%APPDATA%\MakingTop）
-├── HotkeyService.cs           # 全局热键注册/换绑/组合解析
-├── HotkeyBox.cs               # 快捷键录制控件
-├── Controls.xaml              # Apple 风格控件库（开关/胶囊按钮/卡片/录制框）
-├── SettingsWindow.xaml(.cs)   # 设置窗口（快捷键绑定）
-├── PinnedPanelWindow.xaml(.cs)# 置顶管理面板（全部窗口 + 开关）
-├── WindowEnumeration.cs       # 系统顶层窗口枚举（过滤外壳/幽灵窗口）
-├── UiFx.cs                    # 窗口开合动画
-└── tools/IconGen/             # 程序图标生成工具（dotnet run 重生成 Assets/app.ico）
-```
+本项目基于 [MIT License](LICENSE) 开源发布。
 
-## 版权
+Copyright © 2026 Mondayice (mondayice123@163.com)
 
-**Copyright © 2026 Mondayice (mondayice123@163.com)** · All Rights Reserved.
-
-程序与源码的版权信息同时嵌入在 exe 元数据（文件属性 → 详细信息）与各源码文件头部。
-图标源文件由 `tools/IconGen` 从主程序同一份矢量路径生成，保证托盘/悬浮图标/exe 图标视觉一致。
+程序与源码的版权信息同时嵌入在 exe 元数据（文件属性 → 详细信息）与各源码文件头部；
+程序图标由 `tools/IconGen` 从主程序同一份矢量路径生成，保证托盘 / 悬浮图标 / exe 图标视觉一致。

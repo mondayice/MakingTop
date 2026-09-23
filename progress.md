@@ -27,3 +27,8 @@
 - 根因②：跨进程 SetWindowPos(target, overlay) 同步阻塞 → 先试 SWP_ASYNCWINDOWPOS，自检发现异步插队静默失败 → 终方案：改槽自身 overlay 窗口（同线程同步、零阻塞）；置顶/取消仍用 ASYNC 防阻塞
 - ③由④解决：manifest 加 requireAdministrator（可置顶管理员窗口）
 - 自检升级为两段式（置顶→模拟激活→1.5s 后校验 overlayAboveTarget 不变量），PASS；正式版已提权启动 PID 13264
+- 快捷键录制交互两轮修复：录制完成不再自动跳下一项（ClearFocus）；Esc 职责简化为仅取消录制，设置窗口 Esc 不关窗
+- 版权信息落地：csproj 元数据（Copyright/Authors/Company）、全部 22 个源码文件版权头、LICENSE（All Rights Reserved）
+- 图标：tools/IconGen 从同一矢量路径生成 Assets/app.ico（16~256 七帧 BMP ico），csproj ApplicationIcon 嵌入 exe，ExtractAssociatedIcon 验证 OK；主 csproj 排除 tools/**（避免双 Main）
+- GitHub：git init + 2 commits + gh repo create（私有）→ https://github.com/mondayice/MakingTop 已推送 main
+- 踩坑：改 csproj 后 obj 里 WPF 临时工程残留导致重复特性错误，rm -rf obj bin 清理解决
