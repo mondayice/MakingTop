@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>MakingTop</RootNamespace>
+    <AssemblyName>MakingTop</AssemblyName>
+    <!-- PerMonitorV2：多显示器不同缩放下悬浮图标定位与清晰度正确 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 程序图标（由 tools/IconGen 生成的多尺寸 ICO） -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <Product>MakingTop</Product>
+    <Authors>Mondayice</Authors>
+    <Company>Mondayice</Company>
+    <Copyright>Copyright © 2026 Mondayice (mondayice123@163.com)</Copyright>
+    <Description>窗口置顶托盘小工具（Notion 橙风格）</Description>
+    <AssemblyTitle>MakingTop · 窗口置顶小工具</AssemblyTitle>
+    <!-- 无需主窗口，禁止生成默认的空程序集信息告警 -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <!-- tools/IconGen 是独立的图标生成工具项目，不参与主程序编译 -->
+  <ItemGroup>
+    <Compile Remove="tools\**" />
+  </ItemGroup>
+
+</Project>

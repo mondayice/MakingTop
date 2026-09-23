@@ -1,0 +1,28 @@
+<!--
+  MakingTop · Windows 窗口置顶托盘小工具
+  Copyright (c) 2026 Mondayice (mondayice123@163.com)  All Rights Reserved.
+-->
+
+<ContextMenu x:Class="MakingTop.TrayContextMenu"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI" FontSize="13">
+
+    <!-- 托盘右键菜单：Notion 暖橙风格（样式定义在 Theme.xaml） -->
+    <MenuItem x:Name="StartItem"
+              Header="开始选择置顶窗口"
+              Click="OnStartClick"/>
+    <!-- 第二项：0 个=禁用；1 个=点击直接取消；多个=hover 展开子列表（子项由代码动态填充） -->
+    <MenuItem x:Name="UnpinItem"
+              Header="取消当前选中窗口置顶"/>
+    <MenuItem x:Name="UnpinAllItem"
+              Header="取消所有窗口置顶"
+              Click="OnUnpinAllClick"/>
+    <Separator/>
+    <MenuItem x:Name="SettingsItem"
+              Header="设置"
+              Click="OnSettingsClick"/>
+    <MenuItem x:Name="ExitItem"
+              Header="退出程序"
+              Click="OnExitClick"/>
+</ContextMenu>

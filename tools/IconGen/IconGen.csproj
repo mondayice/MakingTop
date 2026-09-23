@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>IconGen</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>Mondayice</Authors>
+    <Copyright>Copyright © 2026 Mondayice (mondayice123@163.com)</Copyright>
+    <Description>MakingTop 程序图标生成工具</Description>
+  </PropertyGroup>
+
+</Project>

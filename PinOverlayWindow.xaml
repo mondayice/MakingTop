@@ -1,0 +1,79 @@
+<!--
+  MakingTop · Windows 窗口置顶托盘小工具
+  Copyright (c) 2026 Mondayice (mondayice123@163.com)  All Rights Reserved.
+-->
+
+<Window x:Class="MakingTop.PinOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MakingTop Overlay"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" ShowActivated="False" Focusable="False"
+        ResizeMode="NoResize" SizeToContent="Manual" UseLayoutRounding="True"
+        WindowStartupLocation="Manual" Left="-32000" Top="-32000"
+        Width="24" Height="24" Topmost="True" Cursor="Hand">
+
+    <!--
+      悬浮图钉：24×24 设计内容经 Viewbox 拉伸到窗口物理像素尺寸，
+      跟随目标窗口所在显示器的 DPI 缩放，任何缩放下都清晰。
+    -->
+    <Viewbox Stretch="Fill">
+        <Border x:Name="PinBorder"
+                Width="24" Height="24" CornerRadius="6"
+                Cursor="Hand" Opacity="0.85"
+                RenderTransformOrigin="0.5,0.5"
+                MouseLeftButtonDown="OnPinClick">
+            <!-- 独立画刷实例（需要参与颜色动画，不能用共享冻结画刷） -->
+            <Border.Background>
+                <SolidColorBrush Color="{StaticResource AccentSoftColor}"/>
+            </Border.Background>
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Style.Triggers>
+                        <!--
+                          hover 态：不透明度 85% → 100%，底色 #FDEDEC → #FAD2CF
+                          120ms 颜色过渡（微交互反馈档位）
+                        -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation
+                                            Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
+                                            To="{StaticResource AccentHoverColor}"
+                                            Duration="0:0:0.12"/>
+                                        <DoubleAnimation
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="1" Duration="0:0:0.12"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation
+                                            Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
+                                            To="{StaticResource AccentSoftColor}"
+                                            Duration="0:0:0.12"/>
+                                        <DoubleAnimation
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="0.85" Duration="0:0:0.12"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+
+            <!-- 橙色 #E16259 图钉（矢量，任意 DPI 清晰） -->
+            <Path Data="{StaticResource PinGeometry}"
+                  Fill="{StaticResource AccentBrush}"
+                  Width="13" Height="13" Stretch="Uniform"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+    </Viewbox>
+</Window>

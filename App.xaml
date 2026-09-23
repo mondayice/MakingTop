@@ -1,0 +1,23 @@
+<!--
+  MakingTop · Windows 窗口置顶托盘小工具
+  Copyright (c) 2026 Mondayice (mondayice123@163.com)  All Rights Reserved.
+-->
+
+<Application x:Class="MakingTop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <!--
+      本程序无主窗口：仅托盘图标 + 悬浮图钉交互。
+      ShutdownMode=OnExplicitShutdown：只有托盘菜单「退出程序」才结束进程。
+    -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+                <!-- Apple 风格控件库（设置窗口 / 置顶管理面板用） -->
+                <ResourceDictionary Source="Controls.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
