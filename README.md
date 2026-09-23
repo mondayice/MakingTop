@@ -84,8 +84,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 | 附件 | 大小 | 说明 |
 |------|------|------|
-| `MakingTop-v1.0.0-win-x64.zip` | 74 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| `MakingTop-v1.0.0-win-x64-selfcontained.zip` | 62.5 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
+| `MakingTop-v1.0.1-win-x64.zip` | 约 140 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| `MakingTop-v1.0.1-win-x64-selfcontained.zip` | 约 67 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
 
 解压后双击 `MakingTop.exe`，托盘出现橙色图钉图标即可使用（首次启动请通过 UAC 提权确认）。
 
