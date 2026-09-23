@@ -11,7 +11,7 @@
 | 交互 | 说明 |
 |------|------|
 | **开始选择置顶窗口** | 托盘菜单点击后，光标变为橙色图钉 → 点击任意窗口即置顶；再进入选择模式点击同一窗口则取消置顶（Esc 取消选择） |
-| **悬浮图钉** | 被置顶窗口客户区左上角显示 24×24 圆角图钉（跟随窗口移动/缩放/DPI，多窗口各自独立）；点击图钉 = 直接取消该窗口置顶 |
+| **悬浮图钉** | 被置顶窗口客户区左上角显示 24×24 圆角图钉（跟随窗口移动/缩放/DPI，多窗口各自独立）；**果冻感出入场**——置顶时弹性缩放落定、取消时压扁收缩消失；四周带双脉冲光环 + 呼吸辉光特效；点击图钉 = 直接取消该窗口置顶 |
 | **取消当前选中窗口置顶** | 随置顶数量自动变形：**0 个**→灰色禁用；**1 个**→显示「取消置顶：窗口标题」，点击直接取消；**多个**→hover 展开子列表列出全部置顶窗口（按置顶顺序），点击某一项取消对应窗口 |
 | **设置（快捷键）** | Apple 风格设置窗口：录制 **4 个全局快捷键**——开始选择置顶 / 取消当前窗口置顶 / 取消所有置顶 / 打开置顶管理面板。修改立即生效，保存到 `%APPDATA%\MakingTop\settings.json`。**默认已绑定**：`Ctrl+Alt+P` 选择置顶、`Ctrl+Alt+U` 取消当前、`Ctrl+Alt+L` 全部取消、`Ctrl+Alt+M` 管理面板；录制规则：需含 Ctrl/Alt/Shift/Win 之一（或单独 F 功能键），Esc 取消、Backspace 清除；支持「恢复默认」与「全部清除」，冲突时行内提示 |
 | **置顶管理面板** | Apple 风格弹窗：列出系统中**全部可管理的顶层窗口**（置顶的排最前带橙色圆点，最小化窗口有标注），每行一个开关实时反映置顶状态——开=置顶、关=取消；任何来源的置顶变化都会即时同步开关；支持「全部取消」。默认快捷键 `Ctrl+Alt+M`，也可从设置窗口一键打开 |
@@ -94,7 +94,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **栈**：C# / WPF（net8.0-windows）+ 纯 Win32 P/Invoke（user32/gdi32/shell32），零第三方 NuGet 包
 - **跟随机制**：`SetWinEventHook` 订阅 `EVENT_OBJECT_LOCATIONCHANGE / REORDER / MINIMIZESTART / MINIMIZEEND / OBJECT_DESTROY`，事件驱动 + Dispatcher 脏标记合并（一帧最多重定位一次），空闲零轮询
 - **Z 序维护**：点击激活等操作把目标窗口顶到图标之上时，把**自己的 overlay 窗口**重新插到目标正上方（同线程同步操作，无跨进程阻塞/异步失败问题）；置顶/取消置顶的目标窗口操作用 `SWP_ASYNCWINDOWPOS` 异步投递防卡死
-- **悬浮图标**：无边框透明 WPF 窗口（`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`），`SetWindowPos` 按物理像素定位在目标客户区左上角 +6px；`app.manifest` 声明 PerMonitorV2，跨显示器 DPI 正确
+- **悬浮图标**：无边框透明 WPF 窗口（`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`），`SetWindowPos` 按物理像素定位在目标客户区左上角 +6px；`app.manifest` 声明 PerMonitorV2，跨显示器 DPI 正确。48×48 画布居中 24×24 图钉，四周为双脉冲光环（错相 800ms 连续波纹）+ 橙色呼吸辉光；出入场为果冻感（入场 `ElasticEase` 弹性落定，出场 squash & stretch 收缩），全部仅动画 transform/opacity，光环层不参与命中测试
 - **Z 序**：悬浮图标常驻 TOPMOST band，目标窗口被槽到图标正下方；顺序已正确时不调用 `SetWindowPos`，避免事件风暴
 - **选择模式**：`WH_MOUSE_LL / WH_KEYBOARD_LL` 低级钩子 + `SetSystemCursor` 临时替换系统光标为橙色图钉（热点=针尖），退出时 `SPI_SETCURSORS` 从注册表整体还原
 - **托盘**：`Shell_NotifyIcon` + 隐藏 `HwndSource` 回调窗口，监听 `TaskbarCreated` 广播自动恢复图标

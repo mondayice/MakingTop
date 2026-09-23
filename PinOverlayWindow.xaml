@@ -11,69 +11,103 @@
         ShowInTaskbar="False" ShowActivated="False" Focusable="False"
         ResizeMode="NoResize" SizeToContent="Manual" UseLayoutRounding="True"
         WindowStartupLocation="Manual" Left="-32000" Top="-32000"
-        Width="24" Height="24" Topmost="True" Cursor="Hand">
+        Width="48" Height="48" Topmost="True" Cursor="Hand" Opacity="0">
 
     <!--
-      悬浮图钉：24×24 设计内容经 Viewbox 拉伸到窗口物理像素尺寸，
-      跟随目标窗口所在显示器的 DPI 缩放，任何缩放下都清晰。
+      48×48 设计画布（Viewbox 拉伸到物理像素，跟随目标窗口 DPI）：
+      - 居中一枚 24×24 图钉本体（交互与定位与旧版完全一致）
+      - 四周：双脉冲光环（雷达波纹）+ 呼吸辉光，代码在入场后启动循环
+      - 光环不参与命中测试：只有图钉本体可点击，透明区域点击直接穿透到下层窗口
     -->
     <Viewbox Stretch="Fill">
-        <Border x:Name="PinBorder"
-                Width="24" Height="24" CornerRadius="6"
-                Cursor="Hand" Opacity="0.85"
-                RenderTransformOrigin="0.5,0.5"
-                MouseLeftButtonDown="OnPinClick">
-            <!-- 独立画刷实例（需要参与颜色动画，不能用共享冻结画刷） -->
-            <Border.Background>
-                <SolidColorBrush Color="{StaticResource AccentSoftColor}"/>
-            </Border.Background>
-            <Border.RenderTransform>
-                <ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1"/>
-            </Border.RenderTransform>
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Style.Triggers>
-                        <!--
-                          hover 态：不透明度 85% → 100%，底色 #FDEDEC → #FAD2CF
-                          120ms 颜色过渡（微交互反馈档位）
-                        -->
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Trigger.EnterActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <ColorAnimation
-                                            Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
-                                            To="{StaticResource AccentHoverColor}"
-                                            Duration="0:0:0.12"/>
-                                        <DoubleAnimation
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1" Duration="0:0:0.12"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.EnterActions>
-                            <Trigger.ExitActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <ColorAnimation
-                                            Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
-                                            To="{StaticResource AccentSoftColor}"
-                                            Duration="0:0:0.12"/>
-                                        <DoubleAnimation
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0.85" Duration="0:0:0.12"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.ExitActions>
-                        </Trigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
+        <Grid Width="48" Height="48">
 
-            <!-- 橙色 #E16259 图钉（矢量，任意 DPI 清晰） -->
-            <Path Data="{StaticResource PinGeometry}"
-                  Fill="{StaticResource AccentBrush}"
-                  Width="13" Height="13" Stretch="Uniform"
-                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
+            <!-- 脉冲光环 ×2（错相 800ms 形成连续波纹，围绕自身中心缩放） -->
+            <Ellipse x:Name="Ring1"
+                     Width="24" Height="24"
+                     Stroke="#E16259" StrokeThickness="2.5"
+                     Opacity="0" IsHitTestVisible="False"
+                     RenderTransformOrigin="0.5,0.5"
+                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="Ring1Scale" ScaleX="0.55" ScaleY="0.55"/>
+                </Ellipse.RenderTransform>
+            </Ellipse>
+            <Ellipse x:Name="Ring2"
+                     Width="24" Height="24"
+                     Stroke="#E16259" StrokeThickness="2.5"
+                     Opacity="0" IsHitTestVisible="False"
+                     RenderTransformOrigin="0.5,0.5"
+                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="Ring2Scale" ScaleX="0.55" ScaleY="0.55"/>
+                </Ellipse.RenderTransform>
+            </Ellipse>
+
+            <!-- 图钉本体（24×24，命中区域 = 本体） -->
+            <Border x:Name="PinBorder"
+                    Width="24" Height="24" CornerRadius="6"
+                    Cursor="Hand" Opacity="0.85"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    RenderTransformOrigin="0.5,0.5"
+                    MouseLeftButtonDown="OnPinClick">
+                <!-- 呼吸辉光（橙色柔光，循环动画驱动 Opacity） -->
+                <Border.Effect>
+                    <DropShadowEffect x:Name="PinGlow" Color="#E16259" BlurRadius="12"
+                                      ShadowDepth="0" Opacity="0"/>
+                </Border.Effect>
+                <!-- 独立画刷实例（需要参与颜色动画，不能用共享冻结画刷） -->
+                <Border.Background>
+                    <SolidColorBrush Color="{StaticResource AccentSoftColor}"/>
+                </Border.Background>
+                <Border.RenderTransform>
+                    <ScaleTransform x:Name="PressScale" ScaleX="1" ScaleY="1"/>
+                </Border.RenderTransform>
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Style.Triggers>
+                            <!--
+                              hover 态：不透明度 85% → 100%，底色 #FDEDEC → #FAD2CF
+                              120ms 颜色过渡（微交互反馈档位）
+                            -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation
+                                                Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
+                                                To="{StaticResource AccentHoverColor}"
+                                                Duration="0:0:0.12"/>
+                                            <DoubleAnimation
+                                                Storyboard.TargetProperty="Opacity"
+                                                To="1" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <ColorAnimation
+                                                Storyboard.TargetProperty="Background.(SolidColorBrush.Color)"
+                                                To="{StaticResource AccentSoftColor}"
+                                                Duration="0:0:0.12"/>
+                                            <DoubleAnimation
+                                                Storyboard.TargetProperty="Opacity"
+                                                To="0.85" Duration="0:0:0.12"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <!-- 橙色 #E16259 图钉（矢量，任意 DPI 清晰） -->
+                <Path Data="{StaticResource PinGeometry}"
+                      Fill="{StaticResource AccentBrush}"
+                      Width="13" Height="13" Stretch="Uniform"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
     </Viewbox>
 </Window>

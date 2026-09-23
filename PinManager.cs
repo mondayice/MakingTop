@@ -246,22 +246,23 @@ internal sealed class PinManager : IDisposable
         uint dpi = GetDpiForWindow(hwnd);
         if (dpi == 0) dpi = 96;
         double scale = dpi / 96.0;
-        int size = (int)Math.Round(24 * scale);
-        int offset = (int)Math.Round(6 * scale);
+        int size = (int)Math.Round(24 * scale);              // 图钉本体物理尺寸（视觉不变）
+        int winSize = size * 2;                              // 48×48 画布：四周留给脉冲光环特效
+        int offset = (int)Math.Round(6 * scale) - size / 2;  // 窗口外扩半幅，图钉左上角仍在 +6px
 
         var rect = new RECT
         {
             Left = origin.X + offset,
             Top = origin.Y + offset,
-            Right = origin.X + offset + size,
-            Bottom = origin.Y + offset + size
+            Right = origin.X + offset + winSize,
+            Bottom = origin.Y + offset + winSize
         };
 
         // 物理矩形无变化时不重定位（消除冗余绘制，杜绝拖影）
         if (!RectEquals(rect, entry.LastRect))
         {
             entry.LastRect = rect;
-            entry.Overlay.MoveToPhysical(rect.Left, rect.Top, size, size);
+            entry.Overlay.MoveToPhysical(rect.Left, rect.Top, winSize, winSize);
         }
 
         EnsureZOrder(hwnd, entry);
