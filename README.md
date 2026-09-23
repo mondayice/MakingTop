@@ -78,6 +78,17 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **独占全屏 DirectX 游戏**：exclusive fullscreen 模式下置顶窗口/悬浮图标可能被游戏画面覆盖（Windows 系统限制）；无边框窗口化游戏不受影响。
 - 选择模式下光标替换的是系统级光标，程序异常退出时也会在下次启动光标设置刷新后还原（正常路径退出时立即还原）。
 
+## 下载
+
+前往 [Releases 页面](https://github.com/mondayice/MakingTop/releases/latest) 获取最新版本，两个包任选其一：
+
+| 附件 | 大小 | 说明 |
+|------|------|------|
+| `MakingTop-v1.0.0-win-x64.zip` | 74 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| `MakingTop-v1.0.0-win-x64-selfcontained.zip` | 62.5 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
+
+解压后双击 `MakingTop.exe`，托盘出现橙色图钉图标即可使用（首次启动请通过 UAC 提权确认）。
+
 ## 技术说明
 
 - **栈**：C# / WPF（net8.0-windows）+ 纯 Win32 P/Invoke（user32/gdi32/shell32），零第三方 NuGet 包
@@ -91,37 +102,11 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 - **Apple 风格窗口**：无边框圆角 + 柔和投影 + 卡片分组 + Apple 开关（150ms ease-out）+ 打开淡入缩放动画；控件库见 `Controls.xaml`
 - **自动化自检**：`MakingTop.exe --selftest` 会把当前前台窗口置顶 3 秒并校验悬浮图标真实创建，结果写入 `%TEMP%\MakingTop-selftest.log`（退出码 0=通过），随后自动还原并退出
 
-## 目录结构
+## 许可证
 
-```
-MakingTop/
-├── MakingTop.csproj           # net8.0-windows, UseWPF
-├── app.manifest               # 管理员权限 + PerMonitorV2 DPI 声明
-├── Assets/app.ico             # 程序图标（多尺寸，嵌入 exe）
-├── LICENSE                    # 版权声明
-├── App.xaml / App.xaml.cs     # 入口：单实例、服务组装、退出流程
-├── Theme.xaml                 # Notion 暖橙色板 + 托盘菜单样式
-├── NativeMethods.cs           # Win32 P/Invoke 声明
-├── IconFactory.cs             # 图钉几何 → 托盘 HICON / 选择光标 HCURSOR
-├── TrayIconService.cs         # 托盘图标 + 回调窗口 + Explorer 重启恢复
-├── TrayContextMenu.xaml(.cs)  # Notion 风格托盘右键菜单
-├── PinManager.cs              # 置顶注册表 + WinEvent 事件驱动跟随 + z 序维护
-├── PinOverlayWindow.xaml(.cs) # 24×24 悬浮图钉窗口
-├── SelectionService.cs        # 选择模式：LL 钩子 + 图钉光标
-├── AppSettings.cs             # 设置 JSON 持久化（%APPDATA%\MakingTop）
-├── HotkeyService.cs           # 全局热键注册/换绑/组合解析
-├── HotkeyBox.cs               # 快捷键录制控件
-├── Controls.xaml              # Apple 风格控件库（开关/胶囊按钮/卡片/录制框）
-├── SettingsWindow.xaml(.cs)   # 设置窗口（快捷键绑定）
-├── PinnedPanelWindow.xaml(.cs)# 置顶管理面板（全部窗口 + 开关）
-├── WindowEnumeration.cs       # 系统顶层窗口枚举（过滤外壳/幽灵窗口）
-├── UiFx.cs                    # 窗口开合动画
-└── tools/IconGen/             # 程序图标生成工具（dotnet run 重生成 Assets/app.ico）
-```
+本项目基于 [MIT License](LICENSE) 开源发布。
 
-## 版权
+Copyright © 2026 Mondayice (mondayice123@163.com)
 
-**Copyright © 2026 Mondayice (mondayice123@163.com)** · All Rights Reserved.
-
-程序与源码的版权信息同时嵌入在 exe 元数据（文件属性 → 详细信息）与各源码文件头部。
-图标源文件由 `tools/IconGen` 从主程序同一份矢量路径生成，保证托盘/悬浮图标/exe 图标视觉一致。
+程序与源码的版权信息同时嵌入在 exe 元数据（文件属性 → 详细信息）与各源码文件头部；
+程序图标由 `tools/IconGen` 从主程序同一份矢量路径生成，保证托盘 / 悬浮图标 / exe 图标视觉一致。

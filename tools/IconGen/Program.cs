@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // MakingTop · Windows 窗口置顶托盘小工具 —— 程序图标生成工具
-// Copyright (c) 2026 Mondayice (mondayice123@163.com)  All Rights Reserved.
+// Copyright (c) 2026 Mondayice (mondayice123@163.com)  Licensed under the MIT License.
 //
 // 用 WPF 渲染图钉图形（与主程序同一份矢量路径），输出多尺寸 BMP 帧的 .ico 文件。
 // 用法: dotnet run --project tools/IconGen -- <输出路径 Assets/app.ico>
