@@ -33,6 +33,7 @@ internal static partial class NativeMethods
     public const uint WINEVENT_SKIPOWNPROCESS = 0x0002; // 忽略本进程自身窗口的事件
     public const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
     public const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003; // 某窗口成为前台（激活）——层级可能被系统重排
     public const uint EVENT_OBJECT_DESTROY = 0x8001;
     public const uint EVENT_OBJECT_REORDER = 0x8004;    // 层级（Z 序）变化
     public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B; // 位置/大小变化
@@ -204,6 +205,10 @@ internal static partial class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

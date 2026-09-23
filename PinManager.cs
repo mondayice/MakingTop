@@ -30,8 +30,9 @@ internal sealed class PinManager : IDisposable
     // 关键：原生回调委托必须用字段保住引用，否则被 GC 回收后
     // 系统回调进入已回收的委托会直接 FailFast 崩溃（已踩坑）
     private readonly WinEventDelegate _winEventProc;
-    private readonly IntPtr _hookMinMax; // [最小化开始 .. 最小化结束]
-    private readonly IntPtr _hookObj;    // [销毁 .. 位置变化]（含层级 REORDER）
+    private readonly IntPtr _hookMinMax;     // [最小化开始 .. 最小化结束]
+    private readonly IntPtr _hookObj;        // [销毁 .. 位置变化]（含层级 REORDER）
+    private readonly IntPtr _hookForeground; // [系统前台变化]（激活是层级被重排的高发时刻）
     private IntPtr _lastPinnedHwnd;
 
     /// <summary>最近置顶窗口的标题（供托盘菜单动态显示）。</summary>
@@ -53,6 +54,8 @@ internal sealed class PinManager : IDisposable
         _hookMinMax = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND,
             IntPtr.Zero, _winEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
         _hookObj = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_LOCATIONCHANGE,
+            IntPtr.Zero, _winEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        _hookForeground = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
             IntPtr.Zero, _winEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     }
 
@@ -85,8 +88,20 @@ internal sealed class PinManager : IDisposable
         _lastPinnedHwnd = hwnd;
         LastPinnedTitle = GetWindowText(hwnd);
 
-        // 3) 定位到客户区左上角 + 维护 z 序（图标必须盖在目标窗口正上方）
+        // 3) 定位到窗口左上角 + 维护 z 序（图标必须盖在目标窗口正上方）
         UpdateEntryNow(hwnd, entry);
+
+        // 置顶位是异步投递（SWP_ASYNCWINDOWPOS）：目标窗口迁入 TOPMOST 带可能晚于
+        // 上面的同步定位流程完成，且此后不一定再有事件到达 —— 延迟复核一次兜底。
+        var recheck = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        recheck.Tick += (_, _) =>
+        {
+            recheck.Stop();
+            if (_pins.TryGetValue(hwnd, out var current))
+                UpdateEntryNow(hwnd, current);
+        };
+        recheck.Start();
+
         PinsChanged?.Invoke();
     }
 
@@ -171,12 +186,18 @@ internal sealed class PinManager : IDisposable
         {
             // 目标窗口销毁：此刻窗口已不可用，只做自身状态清理
             RemoveEntry(hwnd);
+            return;
         }
-        else
+
+        if (evt == EVENT_SYSTEM_FOREGROUND)
         {
-            // 移动/缩放/层级/最小化/显示隐藏 → 合并成一次 Dispatcher 更新
+            // 目标窗口被激活：系统可能把它提到 TOPMOST 带顶部（盖过图钉），立即校验
             QueueUpdate(hwnd);
+            return;
         }
+
+        // 移动/缩放/层级/最小化/显示隐藏 → 合并成一次 Dispatcher 更新
+        QueueUpdate(hwnd);
     }
 
     private void QueueUpdate(IntPtr hwnd)
@@ -238,9 +259,11 @@ internal sealed class PinManager : IDisposable
             entry.Overlay.SetOverlayVisible(true);
         }
 
-        // 目标窗口客户区原点（客户坐标 (0,0)）换算到屏幕物理像素
-        var origin = new POINT();
-        ClientToScreen(hwnd, ref origin);
+        // 目标窗口矩形左上角（屏幕物理像素）。锚定「窗口」而非「客户区」：
+        // 客户区在记事本等带菜单栏的程序里位于菜单栏之下，图钉会盖住编辑内容；
+        // 窗口左上角对应标题栏区域，图钉不会遮挡正文。
+        if (!GetWindowRect(hwnd, out var winRect)) return;
+        int anchorX = winRect.Left, anchorY = winRect.Top;
 
         // 按目标窗口所在显示器的 DPI 缩放 24×24 图标与 6px 内边距
         uint dpi = GetDpiForWindow(hwnd);
@@ -248,14 +271,14 @@ internal sealed class PinManager : IDisposable
         double scale = dpi / 96.0;
         int size = (int)Math.Round(24 * scale);              // 图钉本体物理尺寸（视觉不变）
         int winSize = size * 2;                              // 48×48 画布：四周留给脉冲光环特效
-        int offset = (int)Math.Round(6 * scale) - size / 2;  // 窗口外扩半幅，图钉左上角仍在 +6px
+        int offset = (int)Math.Round(6 * scale) - size / 2;  // 画布外扩半幅，图钉左上角仍在锚点 +6px
 
         var rect = new RECT
         {
-            Left = origin.X + offset,
-            Top = origin.Y + offset,
-            Right = origin.X + offset + winSize,
-            Bottom = origin.Y + offset + winSize
+            Left = anchorX + offset,
+            Top = anchorY + offset,
+            Right = anchorX + offset + winSize,
+            Bottom = anchorY + offset + winSize
         };
 
         // 物理矩形无变化时不重定位（消除冗余绘制，杜绝拖影）
@@ -273,6 +296,7 @@ internal sealed class PinManager : IDisposable
     /// 判据：目标窗口正上方的窗口（GW_HWNDPREV）就是 overlay —— 已正确则不做任何事，避免事件风暴。
     /// 实现上移动的是「我们自己的 overlay 窗口」而不是目标窗口：
     /// 同线程同步操作，立即生效，也彻底避免跨进程 SetWindowPos 的阻塞/异步失败问题。
+    /// 写入后复核不变式；激活引发的带内重排存在竞态，最多重试 3 次。
     /// </summary>
     private void EnsureZOrder(IntPtr hwnd, PinEntry entry)
     {
@@ -280,11 +304,15 @@ internal sealed class PinManager : IDisposable
         if (overlayHwnd == IntPtr.Zero || !IsWindow(overlayHwnd)) return;
         if (GetWindow(hwnd, GW_HWNDPREV) == overlayHwnd) return; // 已在正确位置
 
-        // 把 overlay 插到 target 的上一个窗口下方 = target 正上方；
-        // target 已是 TOPMOST band 顶部（其上无窗口）时直接放到带顶部。
-        IntPtr above = GetWindow(hwnd, GW_HWNDPREV);
-        SetWindowPos(overlayHwnd, above == IntPtr.Zero ? HWND_TOP : above, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            // 把 overlay 插到 target 的上一个窗口下方 = target 正上方；
+            // target 已是 TOPMOST band 顶部（其上无窗口）时直接放到带顶部。
+            IntPtr above = GetWindow(hwnd, GW_HWNDPREV);
+            SetWindowPos(overlayHwnd, above == IntPtr.Zero ? HWND_TOP : above, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            if (GetWindow(hwnd, GW_HWNDPREV) == overlayHwnd) return; // 复核通过
+        }
     }
 
     private static bool RectEquals(in RECT a, in RECT b)
@@ -306,6 +334,7 @@ internal sealed class PinManager : IDisposable
     {
         if (_hookMinMax != IntPtr.Zero) UnhookWinEvent(_hookMinMax);
         if (_hookObj != IntPtr.Zero) UnhookWinEvent(_hookObj);
+        if (_hookForeground != IntPtr.Zero) UnhookWinEvent(_hookForeground);
         UnpinAll();
     }
 }

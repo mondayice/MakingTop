@@ -16,7 +16,7 @@ using static MakingTop.NativeMethods;
 namespace MakingTop;
 
 /// <summary>
-/// 悬浮图钉窗口：显示在「被置顶窗口」客户区左上角的图钉。
+/// 悬浮图钉窗口：显示在「被置顶窗口」左上角的图钉。
 /// - 48×48 画布居中一枚 24×24 图钉，四周为脉冲光环 + 呼吸辉光（光环不参与命中测试）
 /// - 出入场为果冻感：首次定位后弹性缩放落定（ElasticEase）；取消置顶时先压扁再收缩淡出
 /// - 点击不激活（WS_EX_NOACTIVATE）、不进任务栏和 Alt+Tab（WS_EX_TOOLWINDOW）
