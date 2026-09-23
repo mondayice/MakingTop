@@ -29,6 +29,7 @@ public partial class PinOverlayWindow : Window
     private bool _fired;          // 防止点击动画期间重复触发
     private bool _entrancePlayed; // 果冻入场只在首次定位时播放一次
     private bool _closing;        // 出场动画期间忽略点击
+    private DispatcherTimer? _fxStopTimer; // 四周特效 3 秒后渐隐关闭
 
     /// <summary>本窗口的原生句柄（供 z 序维护/物理定位使用）。</summary>
     public IntPtr Hwnd { get; private set; }
@@ -176,11 +177,59 @@ public partial class PinOverlayWindow : Window
             RepeatBehavior = RepeatBehavior.Forever,
         };
         PinGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, glow);
+
+        // 特效只持续 3 秒：渐隐关闭，图钉本体保持常驻
+        _fxStopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(3000) };
+        _fxStopTimer.Tick += (_, _) =>
+        {
+            _fxStopTimer?.Stop();
+            _fxStopTimer = null;
+            FadeFxOut();
+        };
+        _fxStopTimer.Start();
     }
 
-    /// <summary>停止四周特效并恢复基值（取消置顶时调用）。</summary>
+    /// <summary>四周特效渐隐（300ms）后清除动画时钟，恢复基值。</summary>
+    private void FadeFxOut()
+    {
+        Ellipse[] rings = { Ring1, Ring2 };
+        foreach (var ring in rings)
+        {
+            var fadeRing = new DoubleAnimation(ring.Opacity, 0, TimeSpan.FromMilliseconds(300));
+            ring.BeginAnimation(OpacityProperty, fadeRing);
+        }
+        var fadeGlow = new DoubleAnimation(PinGlow.Opacity, 0, TimeSpan.FromMilliseconds(300));
+        PinGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, fadeGlow);
+
+        // 环的缩放循环立即停掉（透明后不可见，无需继续占用时钟）
+        ScaleTransform[] scales = { Ring1Scale, Ring2Scale };
+        foreach (var scale in scales)
+        {
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        }
+
+        var cleaner = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(320) };
+        cleaner.Tick += (_, _) =>
+        {
+            cleaner.Stop();
+            foreach (var ring in rings)
+            {
+                ring.BeginAnimation(OpacityProperty, null);
+                ring.Opacity = 0;
+            }
+            PinGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
+            PinGlow.Opacity = 0;
+        };
+        cleaner.Start();
+    }
+
+    /// <summary>停止四周特效并恢复基值（取消置顶/退出时调用）。</summary>
     private void StopFxLoop()
     {
+        _fxStopTimer?.Stop();
+        _fxStopTimer = null;
+
         ScaleTransform[] scales = { Ring1Scale, Ring2Scale };
         Ellipse[] rings = { Ring1, Ring2 };
         for (int i = 0; i < scales.Length; i++)
