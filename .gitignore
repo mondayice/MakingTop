@@ -5,3 +5,4 @@ obj/
 .zcode/
 dist/
 .zcodeignore
+plans/
