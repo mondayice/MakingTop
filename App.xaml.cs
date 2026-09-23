@@ -188,7 +188,7 @@ public partial class App : Application
         if (target == IntPtr.Zero || !SelectionService.IsValidTarget(target))
         {
             log.AppendLine("RESULT=FAIL (no valid target window)");
-            File.AppendAllText(logPath, log.ToString());
+            AppendSelfTestLog(logPath, log.ToString());
             Shutdown(2);
             return;
         }
@@ -233,7 +233,7 @@ public partial class App : Application
                     finally
                     {
                         _pinManager!.UnpinAll();
-                        File.AppendAllText(logPath, log.ToString());
+                        AppendSelfTestLog(logPath, log.ToString());
                         ExitApplication();
                     }
                 };
@@ -242,11 +242,27 @@ public partial class App : Application
             catch (Exception ex)
             {
                 log.AppendLine($"[{DateTime.Now:HH:mm:ss.fff}] 第一段校验异常: {ex.Message}");
-                File.AppendAllText(logPath, log.ToString());
+                AppendSelfTestLog(logPath, log.ToString());
                 ExitApplication();
             }
         };
         timer.Start();
+    }
+
+    /// <summary>自检日志安全写入：提权进程不向用户可控的符号链接/junction 目标追加（防受控文件写入）。</summary>
+    private static void AppendSelfTestLog(string logPath, string content)
+    {
+        try
+        {
+            var fi = new FileInfo(logPath);
+            if (fi.Exists && fi.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                return; // 既有文件是链接 → 拒绝写入
+            File.AppendAllText(logPath, content);
+        }
+        catch
+        {
+            // 日志写入失败不影响自检主流程
+        }
     }
 
     /// <summary>自检目标选取：优先前台窗口，无效则枚举（跳过空标题窗口，避免选到系统残留窗口）。</summary>

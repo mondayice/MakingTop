@@ -107,6 +107,3 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 本项目基于 [MIT License](LICENSE) 开源发布。
 
 Copyright © 2026 Mondayice (mondayice123@163.com)
-
-程序与源码的版权信息同时嵌入在 exe 元数据（文件属性 → 详细信息）与各源码文件头部；
-程序图标由 `tools/IconGen` 从主程序同一份矢量路径生成，保证托盘 / 悬浮图标 / exe 图标视觉一致。

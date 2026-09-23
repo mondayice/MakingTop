@@ -63,11 +63,21 @@ internal sealed class SelectionService : IDisposable
         {
             IntPtr cursor = IconFactory.CreatePinCursorHandle();
             if (cursor != IntPtr.Zero)
-                SetSystemCursor(cursor, id);
+            {
+                if (!SetSystemCursor(cursor, id))
+                    DestroyIcon(cursor); // 调用失败时系统未接管句柄，自行销毁防泄漏
+            }
         }
 
         _mouseHook = SetWindowsHookExW(WH_MOUSE_LL, _mouseProc, GetModuleHandleW(null), 0);
         _keyHook = SetWindowsHookExW(WH_KEYBOARD_LL, _keyProc, GetModuleHandleW(null), 0);
+        if (_mouseHook == IntPtr.Zero || _keyHook == IntPtr.Zero)
+        {
+            // 任一钩子安装失败：立即回滚。否则光标是图钉但点击不被拦截，
+            // 用户的"选择点击"会真实作用到目标应用（可能误触危险按钮）。
+            Stop();
+            return;
+        }
         StateChanged?.Invoke();
     }
 
@@ -114,6 +124,7 @@ internal sealed class SelectionService : IDisposable
     /// <summary>命中测试：光标物理坐标 → 顶层窗口 → 切换置顶 → 结束选择模式。</summary>
     private void HandlePick(POINT pt)
     {
+        if (!IsActive) return; // 快速双击会入队多次：第一次已 Stop，后续入队的拾取直接丢弃
         IntPtr hwnd = WindowFromPoint(pt);
         hwnd = GetAncestor(hwnd, GA_ROOT); // 命中的可能是子窗口，取顶层根窗口
         if (IsValidTarget(hwnd))

@@ -59,6 +59,11 @@ internal readonly record struct HotkeyCombo(uint Mods, uint Vk, string Display)
         int vk = KeyInterop.VirtualKeyFromKey(key);
         if (vk <= 0) return false;
 
+        // 安全校验（与 UI 录制不变量一致）：普通键必须搭配修饰键，单独 F1~F24 允许。
+        // 否则被篡改的 settings.json 可注册裸键全局热键，吞掉全系统该键的输入。
+        bool isFKey = key is >= Key.F1 and <= Key.F24;
+        if (mods == 0 && !isFKey) return false;
+
         combo = new HotkeyCombo(mods, (uint)vk, Serialize(mods, (uint)vk));
         return true;
     }
