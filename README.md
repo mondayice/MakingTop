@@ -10,7 +10,7 @@
 
 | 交互 | 说明 |
 |------|------|
-| **开始选择置顶窗口** | 托盘菜单点击后，光标变为橙色图钉 → 点击任意窗口即置顶；再进入选择模式点击同一窗口则取消置顶（Esc 取消选择） |
+| **开始选择置顶窗口** | 托盘菜单点击后，光标变为橙色图钉 → 点击任意窗口即置顶；再进入选择模式点击同一窗口则取消置顶（Esc 或鼠标右键取消选择） |
 | **悬浮图钉** | 被置顶窗口左上角（标题栏区域）显示 24×24 圆角图钉（跟随窗口移动/缩放/DPI，多窗口各自独立）；**果冻感出入场**——置顶时弹性缩放落定、取消时压扁收缩消失；四周带双脉冲光环 + 呼吸辉光特效（置顶后播放 3 秒）；点击图钉 = 直接取消该窗口置顶 |
 | **取消当前选中窗口置顶** | 随置顶数量自动变形：**0 个**→灰色禁用；**1 个**→显示「取消置顶：窗口标题」，点击直接取消；**多个**→hover 展开子列表列出全部置顶窗口（按置顶顺序），点击某一项取消对应窗口 |
 | **设置（快捷键）** | Apple 风格设置窗口：录制 **4 个全局快捷键**——开始选择置顶 / 取消当前窗口置顶 / 取消所有置顶 / 打开置顶管理面板。修改立即生效，保存到 `%APPDATA%\MakingTop\settings.json`。**默认已绑定**：`Ctrl+Alt+P` 选择置顶、`Ctrl+Alt+U` 取消当前、`Ctrl+Alt+L` 全部取消、`Ctrl+Alt+M` 管理面板；录制规则：需含 Ctrl/Alt/Shift/Win 之一（或单独 F 功能键），Esc 取消、Backspace 清除；支持「恢复默认」与「全部清除」，冲突时行内提示 |
@@ -70,7 +70,7 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 5. 最小化 → 图标隐藏；还原 → 图标恢复
 6. 悬浮图标 hover → 变不透明、底色加深；点击 → 缩小动画后窗口取消置顶、图标消失
 7. 多个窗口置顶 → 各自独立图标；【取消所有窗口置顶】→ 全部消失
-8. Esc 可取消选择模式；【退出程序】→ 所有置顶还原、托盘图标消失、进程结束
+8. Esc 或鼠标右键可取消选择模式；【退出程序】→ 所有置顶还原、托盘图标消失、进程结束
 
 ## 已知限制
 
@@ -84,8 +84,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 | 附件 | 大小 | 说明 |
 |------|------|------|
-| `MakingTop-v1.0.2-win-x64.zip` | 约 140 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| `MakingTop-v1.0.2-win-x64-selfcontained.zip` | 约 67 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
+| `MakingTop-v1.0.3-win-x64.zip` | 约 140 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| `MakingTop-v1.0.3-win-x64-selfcontained.zip` | 约 67 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
 
 解压后双击 `MakingTop.exe`，托盘出现橙色图钉图标即可使用（首次启动请通过 UAC 提权确认）。
 
