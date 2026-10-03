@@ -84,8 +84,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 | 附件 | 大小 | 说明 |
 |------|------|------|
-| `MakingTop-v1.0.1-win-x64.zip` | 约 140 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| `MakingTop-v1.0.1-win-x64-selfcontained.zip` | 约 67 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
+| `MakingTop-v1.0.2-win-x64.zip` | 约 140 KB | 精简版，需已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| `MakingTop-v1.0.2-win-x64-selfcontained.zip` | 约 67 MB | 自包含版，内嵌运行时免安装，解压到任意目录即可运行 |
 
 解压后双击 `MakingTop.exe`，托盘出现橙色图钉图标即可使用（首次启动请通过 UAC 提权确认）。
 
@@ -93,7 +93,8 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 - **栈**：C# / WPF（net8.0-windows）+ 纯 Win32 P/Invoke（user32/gdi32/shell32），零第三方 NuGet 包
 - **跟随机制**：`SetWinEventHook` 订阅 `EVENT_OBJECT_LOCATIONCHANGE / REORDER / MINIMIZESTART / MINIMIZEEND / OBJECT_DESTROY`，事件驱动 + Dispatcher 脏标记合并（一帧最多重定位一次），空闲零轮询
-- **Z 序维护**：点击激活等操作把目标窗口顶到图标之上时，把**自己的 overlay 窗口**重新插到目标正上方（同线程同步操作，无跨进程阻塞/异步失败问题）；置顶/取消置顶的目标窗口操作用 `SWP_ASYNCWINDOWPOS` 异步投递防卡死
+- **Z 序维护**：点击激活等操作把目标窗口顶到图标之上时，把**自己的 overlay 窗口**重新插到目标正上方（同线程同步操作，无跨进程阻塞/异步失败问题）
+- **置顶写入**：置顶请求在线程池线程上执行——先 `AttachThreadInput` 与目标 GUI 线程共享输入状态，再同步写入 TOPMOST 带并立即复核（规避系统前台锁对部分后台窗口置顶请求的静默压制，如稻壳阅读器等场景），失败时异步兜底 + 短延迟重试，全程不阻塞 UI 线程；取消置顶仍用 `SWP_ASYNCWINDOWPOS` 异步投递
 - **悬浮图标**：无边框透明 WPF 窗口（`WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`），`SetWindowPos` 按物理像素定位在目标**窗口矩形**左上角 +6px（标题栏区域，不遮挡客户区内容）；z 序以「目标正上方」为不变式，写入后复核重试，并订阅前台/层级/位置事件即时校验；`app.manifest` 声明 PerMonitorV2，跨显示器 DPI 正确。48×48 画布居中 24×24 图钉，四周为双脉冲光环（错相 800ms 连续波纹）+ 橙色呼吸辉光（限时 3 秒）；出入场为果冻感（入场 `ElasticEase` 弹性落定，出场 squash & stretch 收缩），全部仅动画 transform/opacity，光环层不参与命中测试
 - **Z 序**：悬浮图标常驻 TOPMOST band，目标窗口被槽到图标正下方；顺序已正确时不调用 `SetWindowPos`，避免事件风暴
 - **选择模式**：`WH_MOUSE_LL / WH_KEYBOARD_LL` 低级钩子 + `SetSystemCursor` 临时替换系统光标为橙色图钉（热点=针尖），退出时 `SPI_SETCURSORS` 从注册表整体还原
