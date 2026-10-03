@@ -22,6 +22,7 @@ internal sealed class PinManager : IDisposable
         public RECT LastRect;        // 上次已应用的物理矩形（无变化不重定位，防拖影）
         public bool OverlayHidden;   // 目标最小化/隐藏期间悬浮图标被暂时藏起
         public bool UpdateQueued;    // Dispatcher 合并标志（本帧已排队）
+        public bool TopmostPending;  // 置顶请求在途：跳过 TOPMOST 位校验与 z 序维护
     }
 
     private readonly Dictionary<IntPtr, PinEntry> _pins = new();
@@ -74,35 +75,92 @@ internal sealed class PinManager : IDisposable
         if (_pins.ContainsKey(hwnd)) return;
         if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || !IsWindowVisible(hwnd)) return;
 
-        // 1) 置顶（不改变位置大小、不抢激活；异步投递避免目标进程繁忙时卡住本工具）
-        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
-
-        // 2) 悬浮图标（XAML 中初始位置在屏幕外，Show 后立即定位，避免闪现）
+        // 1) 悬浮图标（XAML 中初始位置在屏幕外，Show 后立即定位，避免闪现）
         var overlay = new PinOverlayWindow(this, hwnd);
         overlay.Show();
 
-        var entry = new PinEntry { Overlay = overlay };
+        var entry = new PinEntry { Overlay = overlay, TopmostPending = true };
         _pins[hwnd] = entry;
         _pinOrder.Add(hwnd);
         _lastPinnedHwnd = hwnd;
         LastPinnedTitle = GetWindowText(hwnd);
 
-        // 3) 定位到窗口左上角 + 维护 z 序（图标必须盖在目标窗口正上方）
+        // 2) 先定位悬浮图标（在途状态下不做 TOPMOST 位校验 / z 序维护）
         UpdateEntryNow(hwnd, entry);
 
-        // 置顶位是异步投递（SWP_ASYNCWINDOWPOS）：目标窗口迁入 TOPMOST 带可能晚于
-        // 上面的同步定位流程完成，且此后不一定再有事件到达 —— 延迟复核一次兜底。
-        var recheck = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
-        recheck.Tick += (_, _) =>
+        // 3) 置顶请求放到线程池执行：attach 后的同步 SetWindowPos 在目标线程
+        //    僵死时会长时间阻塞，绝不能卡住本工具的 UI 线程。
+        Task.Run(() =>
         {
-            recheck.Stop();
-            if (_pins.TryGetValue(hwnd, out var current))
-                UpdateEntryNow(hwnd, current);
-        };
-        recheck.Start();
+            bool ok = TryBringToTopmost(hwnd);
+            _dispatcher.BeginInvoke(() => OnTopmostAttemptFinished(hwnd, ok));
+        });
 
         PinsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// 把窗口置入 TOPMOST 带，返回 TOPMOST 位是否确实置上。
+    /// 后台进程对「刚被用户切走」等状态的后台窗口调用 SetWindowPos(HWND_TOPMOST)
+    /// 会被系统的前台锁静默吞掉：返回 TRUE 但层级与样式位都不变（实测稻壳阅读器
+    /// 等场景）。先 AttachThreadInput 与目标 GUI 线程共享输入状态即可正常置顶。
+    /// </summary>
+    private static bool TryBringToTopmost(IntPtr hwnd)
+    {
+        uint targetThread = GetWindowThreadProcessId(hwnd, out _);
+        uint currentThread = GetCurrentThreadId();
+        bool attached = targetThread != 0 && targetThread != currentThread
+            && AttachThreadInput(currentThread, targetThread, true);
+
+        // 同步写入并立刻复核：被静默吞掉时 TOPMOST 位不会出现
+        bool ok = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        ok = ok && (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+
+        if (attached) AttachThreadInput(currentThread, targetThread, false);
+
+        if (!ok)
+        {
+            // 兜底：目标线程可能暂时繁忙，异步投递再试一次（尽力而为）
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// 置顶尝试完成：成功则恢复常规校验并立即对齐 z 序；
+    /// 失败则短延迟复核两次（给异步兜底留生效时间），仍失败才收起图钉。
+    /// </summary>
+    private void OnTopmostAttemptFinished(IntPtr hwnd, bool ok)
+    {
+        if (!_pins.TryGetValue(hwnd, out var entry)) return;
+        if (ok)
+        {
+            entry.TopmostPending = false;
+            UpdateEntryNow(hwnd, entry);
+            return;
+        }
+
+        var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        int attempts = 0;
+        retry.Tick += (_, _) =>
+        {
+            if (!_pins.TryGetValue(hwnd, out var current)) { retry.Stop(); return; }
+            if ((GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0)
+            {
+                retry.Stop();
+                current.TopmostPending = false;
+                UpdateEntryNow(hwnd, current);
+                return;
+            }
+            if (++attempts >= 2)
+            {
+                retry.Stop();
+                UnpinWindow(hwnd);
+            }
+        };
+        retry.Start();
     }
 
     /// <summary>取消置顶：关闭悬浮图标 + 目标窗口恢复普通层级。</summary>
@@ -235,8 +293,9 @@ internal sealed class PinManager : IDisposable
             return;
         }
 
-        // 目标窗口的 TOPMOST 位被外部（其他工具/Alt+Esc 等）清掉 → 尊重用户意图，静默清理
-        if ((GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0)
+        // 目标窗口的 TOPMOST 位被外部（其他工具/Alt+Esc 等）清掉 → 尊重用户意图，静默清理。
+        // 置顶请求在途时跳过：位尚未置上是正常中间态，不代表用户取消。
+        if (!entry.TopmostPending && (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0)
         {
             UnpinWindow(hwnd);
             return;
@@ -288,7 +347,10 @@ internal sealed class PinManager : IDisposable
             entry.Overlay.MoveToPhysical(rect.Left, rect.Top, winSize, winSize);
         }
 
-        EnsureZOrder(hwnd, entry);
+        // 目标尚未进入 TOPMOST 带时跳过 z 序维护：此时把 overlay 插到目标上方
+        // 会把 overlay 自己拽出 TOPMOST 带（插入点在普通带内）
+        if (!entry.TopmostPending)
+            EnsureZOrder(hwnd, entry);
     }
 
     /// <summary>

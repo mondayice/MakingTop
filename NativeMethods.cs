@@ -255,6 +255,15 @@ internal static partial class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    // ============ 前台锁突破（AttachThreadInput） ============
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
 
