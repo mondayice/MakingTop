@@ -15,7 +15,7 @@ namespace MakingTop;
 /// - 进入时临时替换系统光标为橙色图钉（针尖为热点），退出时从注册表整体还原
 /// - WH_MOUSE_LL 捕获下一次左键点击（吞掉，防止误触目标窗口内容），
 ///   WindowFromPoint → GA_ROOT 找到顶层窗口 → 交给 PinManager 切换置顶
-/// - WH_KEYBOARD_LL 捕获 Esc 取消选择
+/// - 右键或 Esc（WH_KEYBOARD_LL）取消本次选择
 /// - 单发模式：一次点击完成即退出；钩子回调只做最少工作，重活甩给 UI 线程
 /// </summary>
 internal sealed class SelectionService : IDisposable
@@ -116,6 +116,16 @@ internal sealed class SelectionService : IDisposable
             if (msg == WM_LBUTTONUP)
             {
                 return (IntPtr)1; // 吞掉配对的抬起，避免目标窗口收到孤立的抬起
+            }
+            if (msg == WM_RBUTTONDOWN)
+            {
+                // 右键取消本次选择（吞掉，防止右键穿透触发目标窗口的菜单/内容）
+                Dispatcher.CurrentDispatcher.BeginInvoke(Stop, DispatcherPriority.Send);
+                return (IntPtr)1;
+            }
+            if (msg == WM_RBUTTONUP)
+            {
+                return (IntPtr)1; // 吞掉配对的抬起
             }
         }
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);

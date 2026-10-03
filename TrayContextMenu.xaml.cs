@@ -54,7 +54,7 @@ public partial class TrayContextMenu : ContextMenu
     /// <param name="pinned">当前全部置顶窗口（按置顶顺序，句柄+标题）</param>
     public void UpdateState(bool selecting, IReadOnlyList<(IntPtr Hwnd, string Title)> pinned)
     {
-        StartItem.Header = selecting ? "取消选择（进行中，按 Esc 退出）" : "开始选择置顶窗口";
+        StartItem.Header = selecting ? "取消选择（进行中，按 Esc 或右键退出）" : "开始选择置顶窗口";
 
         _pinnedCount = pinned.Count;
         UnpinItem.Items.Clear();
