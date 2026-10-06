@@ -58,6 +58,8 @@ internal static partial class NativeMethods
     public const uint SWP_ASYNCWINDOWPOS = 0x4000; // 跨进程置位时投递到目标线程，不阻塞等待（防卡死）
 
     // GetWindow
+    public const uint GW_HWNDFIRST = 0; // Z 序最顶部的窗口（同所有权域）
+    public const uint GW_HWNDNEXT = 2; // Z 序中的下一个（更靠底）窗口
     public const uint GW_HWNDPREV = 3; // Z 序中的上一个（更靠顶）窗口
 
     // 托盘 Shell_NotifyIcon

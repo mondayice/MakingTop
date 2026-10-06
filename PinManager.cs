@@ -101,36 +101,55 @@ internal sealed class PinManager : IDisposable
 
     /// <summary>
     /// 把窗口置入 TOPMOST 带，返回 TOPMOST 位是否确实置上。
-    /// 后台进程对「刚被用户切走」等状态的后台窗口调用 SetWindowPos(HWND_TOPMOST)
-    /// 会被系统的前台锁静默吞掉：返回 TRUE 但层级与样式位都不变（实测稻壳阅读器
-    /// 等场景）。先 AttachThreadInput 与目标 GUI 线程共享输入状态即可正常置顶。
+    /// 系统前台锁会按场景静默吞掉 TOPMOST 请求（返回 TRUE 但层级与样式位都不变），
+    /// 且压制行为随目标窗口的输入状态而变，没有单一调用方式能覆盖全部场景（实测）：
+    /// - 目标「刚被用户切离前台」（瞬态）：plain 调用被吞，AttachThreadInput 后同步写入可破；
+    /// - 目标离开前台已久（如先开稻壳阅读器、隔一阵才置顶）：plain 直接生效，
+    ///   反而 AttachThreadInput 会因调用线程并入目标的非激活输入队列而被吞。
+    /// 因此固定按「plain → attach → 异步兜底」顺序尝试，任一步复核到位即停。
     /// </summary>
     private static bool TryBringToTopmost(IntPtr hwnd)
     {
+        // 1) plain 同步写入并立刻复核：调用进程拥有前台 / 目标瞬态已过期时直接生效
+        if (SyncTopmost(hwnd)) return true;
+
+        // 2) attach 目标 GUI 线程共享输入状态后再同步写入（破「刚被切走」的瞬态压制）。
+        //    attach 后的同步 SetWindowPos 在目标线程僵死时会长时间阻塞，
+        //    本方法整体跑在线程池线程上，绝不能这样卡住 UI 线程。
         uint targetThread = GetWindowThreadProcessId(hwnd, out _);
         uint currentThread = GetCurrentThreadId();
         bool attached = targetThread != 0 && targetThread != currentThread
             && AttachThreadInput(currentThread, targetThread, true);
-
-        // 同步写入并立刻复核：被静默吞掉时 TOPMOST 位不会出现
-        bool ok = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        ok = ok && (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-
-        if (attached) AttachThreadInput(currentThread, targetThread, false);
-
-        if (!ok)
+        if (attached)
         {
-            // 兜底：目标线程可能暂时繁忙，异步投递再试一次（尽力而为）
-            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            try
+            {
+                if (SyncTopmost(hwnd)) return true;
+            }
+            finally
+            {
+                AttachThreadInput(currentThread, targetThread, false);
+            }
         }
-        return ok;
+
+        // 3) 兜底：目标线程可能暂时繁忙，异步投递再试一次（尽力而为）
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        return false;
+    }
+
+    /// <summary>同步写入 TOPMOST 并复核样式位：被前台锁静默吞掉时位不会出现。</summary>
+    private static bool SyncTopmost(IntPtr hwnd)
+    {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        return (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
     }
 
     /// <summary>
     /// 置顶尝试完成：成功则恢复常规校验并立即对齐 z 序；
-    /// 失败则短延迟复核两次（给异步兜底留生效时间），仍失败才收起图钉。
+    /// 失败则短延迟内主动重发 plain 请求并复核两次（目标线程的繁忙/压制是瞬态的，
+    /// 干等会错过恢复时机；attach 路径已在上一步试过），仍失败才收起图钉。
     /// </summary>
     private void OnTopmostAttemptFinished(IntPtr hwnd, bool ok)
     {
@@ -147,7 +166,7 @@ internal sealed class PinManager : IDisposable
         retry.Tick += (_, _) =>
         {
             if (!_pins.TryGetValue(hwnd, out var current)) { retry.Stop(); return; }
-            if ((GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0)
+            if (SyncTopmost(hwnd))
             {
                 retry.Stop();
                 current.TopmostPending = false;
@@ -171,10 +190,16 @@ internal sealed class PinManager : IDisposable
 
         entry.Overlay.CloseOverlay();
 
-        // 目标窗口还活着且仍带 TOPMOST 位 → 恢复普通层级（异步投递防卡死）
+        // 目标窗口还活着且仍带 TOPMOST 位 → 恢复普通层级（异步投递防卡死）。
+        // 异步 NOTOPMOST 与目标线程存在 z 序竞态，窗口偶发被压到普通带内更低位置，
+        // 用户预期是「取消置顶 = 回到置顶前的相对位置（普通带顶部）」，
+        // 因此稍后复核，被压下去就拉回（见 ScheduleNormalBandCheck）。
         if (IsWindow(hwnd) && (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0)
+        {
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            ScheduleNormalBandCheck(hwnd, 2);
+        }
 
         if (_lastPinnedHwnd == hwnd)
         {
@@ -375,6 +400,55 @@ internal sealed class PinManager : IDisposable
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
             if (GetWindow(hwnd, GW_HWNDPREV) == overlayHwnd) return; // 复核通过
         }
+    }
+
+    /// <summary>
+    /// 取消置顶后的位置守卫：确认目标窗口确实位于普通带顶部（其上只剩 TOPMOST 带窗口）。
+    /// 不在顶部（异步竞态压下去 / 目标应用自己乱插 z 序）就同步补一刀
+    /// （HWND_NOTOPMOST 幂等，无副作用），仍失败则放弃（尽力而为）。
+    /// </summary>
+    private void ScheduleNormalBandCheck(IntPtr hwnd, int attempts)
+    {
+        var check = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        check.Tick += (_, _) =>
+        {
+            check.Stop();
+            // 窗口没了、又被置顶（用户/其他工具操作）、或已重新置顶管理 → 不干预
+            if (!IsWindow(hwnd)
+                || (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0
+                || _pins.ContainsKey(hwnd)) return;
+
+            if (IsTopOfNormalBand(hwnd)) return;
+
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            if (attempts > 1) ScheduleNormalBandCheck(hwnd, attempts - 1);
+        };
+        check.Start();
+    }
+
+    /// <summary>
+    /// 窗口是否位于普通带顶部：z 序上目标之上不存在更高的可见非 TOPMOST 顶层窗口
+    /// （DWM 伪装的 UWP 幽灵窗口与本进程自身窗口不算，它们不影响用户的层级观感）。
+    /// </summary>
+    internal static bool IsTopOfNormalBand(IntPtr hwnd)
+    {
+        IntPtr current = GetWindow(hwnd, GW_HWNDFIRST);
+        int guard = 0;
+        while (current != IntPtr.Zero && current != hwnd && guard++ < 64)
+        {
+            if (IsWindowVisible(current) && !IsIconic(current)
+                && (GetWindowLongW(current, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0)
+            {
+                GetWindowThreadProcessId(current, out uint pid);
+                bool cloaked = pid != (uint)Environment.ProcessId
+                    && DwmGetWindowAttribute(current, DWMWA_CLOAKED, out int c, sizeof(int)) == 0
+                    && c != 0;
+                if (!cloaked) return false;
+            }
+            current = GetWindow(current, GW_HWNDNEXT);
+        }
+        return true;
     }
 
     private static bool RectEquals(in RECT a, in RECT b)
