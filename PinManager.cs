@@ -64,7 +64,7 @@ internal sealed class PinManager : IDisposable
     public void TogglePin(IntPtr hwnd)
     {
         if (_pins.ContainsKey(hwnd))
-            UnpinWindow(hwnd);
+            UnpinWindow(hwnd, "toggle");
         else
             PinWindow(hwnd);
     }
@@ -74,6 +74,9 @@ internal sealed class PinManager : IDisposable
     {
         if (_pins.ContainsKey(hwnd)) return;
         if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || !IsWindowVisible(hwnd)) return;
+
+        DiagLog.Write(string.Format("pin 0x{0:X} '{1}' fg=0x{2:X}",
+            hwnd.ToInt64(), GetWindowText(hwnd), GetForegroundWindow().ToInt64()));
 
         // 1) 悬浮图标（XAML 中初始位置在屏幕外，Show 后立即定位，避免闪现）
         var overlay = new PinOverlayWindow(this, hwnd);
@@ -135,6 +138,7 @@ internal sealed class PinManager : IDisposable
         // 3) 兜底：目标线程可能暂时繁忙，异步投递再试一次（尽力而为）
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        DiagLog.Write(string.Format("pin 0x{0:X}: plain+attach both swallowed, async fallback sent", hwnd.ToInt64()));
         return false;
     }
 
@@ -147,9 +151,12 @@ internal sealed class PinManager : IDisposable
     }
 
     /// <summary>
-    /// 置顶尝试完成：成功则恢复常规校验并立即对齐 z 序；
-    /// 失败则短延迟内主动重发 plain 请求并复核两次（目标线程的繁忙/压制是瞬态的，
-    /// 干等会错过恢复时机；attach 路径已在上一步试过），仍失败才收起图钉。
+    /// 置顶尝试完成：成功则恢复常规校验并立即对齐 z 序。
+    /// 失败则进入渐进退避重试（250/250/500/500/1000/1000/2000ms，总窗口约 7 秒）：
+    /// 目标线程繁忙与前台锁压制都是瞬态的，快速放弃会把「偶发全链失败」变成用户看到的
+    /// 「点击置顶后立即取消」；期间图钉保持显示（TopmostPending），重试成功即自愈。
+    /// 每轮重试在工作线程执行（plain → attach），同步 SWP 遇到繁忙目标线程时绝不冻结 UI。
+    /// 全部轮次失败才收起图钉（reason=retry-exhausted）。
     /// </summary>
     private void OnTopmostAttemptFinished(IntPtr hwnd, bool ok)
     {
@@ -161,32 +168,77 @@ internal sealed class PinManager : IDisposable
             return;
         }
 
-        var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-        int attempts = 0;
+        int[] delays = { 250, 250, 500, 500, 1000, 1000, 2000 };
+        int attempt = 0;
+        int inFlight = 0; // 上一轮重试未返回时跳过本 tick，防止线程池任务堆积
+        var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delays[0]) };
         retry.Tick += (_, _) =>
         {
-            if (!_pins.TryGetValue(hwnd, out var current)) { retry.Stop(); return; }
-            if (SyncTopmost(hwnd))
+            if (!_pins.TryGetValue(hwnd, out _)) { retry.Stop(); return; }
+            if (Interlocked.CompareExchange(ref inFlight, 1, 0) != 0) return;
+
+            Task.Run(() =>
             {
-                retry.Stop();
-                current.TopmostPending = false;
-                UpdateEntryNow(hwnd, current);
-                return;
-            }
-            if (++attempts >= 2)
-            {
-                retry.Stop();
-                UnpinWindow(hwnd);
-            }
+                bool done = RetryOnce(hwnd);
+                _dispatcher.BeginInvoke(() =>
+                {
+                    Interlocked.Exchange(ref inFlight, 0);
+                    if (!_pins.TryGetValue(hwnd, out var current)) { retry.Stop(); return; }
+                    if (done)
+                    {
+                        retry.Stop();
+                        current.TopmostPending = false;
+                        UpdateEntryNow(hwnd, current);
+                        return;
+                    }
+                    attempt++;
+                    if (attempt >= delays.Length)
+                    {
+                        retry.Stop();
+                        DiagLog.Write(string.Format("pin 0x{0:X}: retries exhausted, giving up", hwnd.ToInt64()));
+                        UnpinWindow(hwnd, "retry-exhausted");
+                    }
+                    else
+                    {
+                        retry.Interval = TimeSpan.FromMilliseconds(delays[attempt]);
+                    }
+                });
+            });
         };
         retry.Start();
     }
 
+    /// <summary>单轮重试：plain 失败再走 attach（「刚被切走」压制只有 attach 能破）。</summary>
+    private static bool RetryOnce(IntPtr hwnd)
+    {
+        if (SyncTopmost(hwnd)) return true;
+
+        uint targetThread = GetWindowThreadProcessId(hwnd, out _);
+        uint currentThread = GetCurrentThreadId();
+        bool attached = targetThread != 0 && targetThread != currentThread
+            && AttachThreadInput(currentThread, targetThread, true);
+        if (attached)
+        {
+            try
+            {
+                if (SyncTopmost(hwnd)) return true;
+            }
+            finally
+            {
+                AttachThreadInput(currentThread, targetThread, false);
+            }
+        }
+        return false;
+    }
+
     /// <summary>取消置顶：关闭悬浮图标 + 目标窗口恢复普通层级。</summary>
-    public void UnpinWindow(IntPtr hwnd)
+    public void UnpinWindow(IntPtr hwnd) => UnpinWindow(hwnd, "user");
+
+    internal void UnpinWindow(IntPtr hwnd, string reason)
     {
         if (!_pins.Remove(hwnd, out var entry)) return;
         _pinOrder.Remove(hwnd);
+        DiagLog.Write(string.Format("unpin 0x{0:X} ({1})", hwnd.ToInt64(), reason));
 
         entry.Overlay.CloseOverlay();
 
@@ -214,14 +266,14 @@ internal sealed class PinManager : IDisposable
     {
         // 拷贝一份再遍历：UnpinWindow 会修改字典
         foreach (var hwnd in _pins.Keys.ToArray())
-            UnpinWindow(hwnd);
+            UnpinWindow(hwnd, "unpin-all");
     }
 
     /// <summary>取消最近一次置顶的窗口（托盘菜单「取消当前选中窗口置顶」）。</summary>
     public void UnpinLast()
     {
         if (_lastPinnedHwnd != IntPtr.Zero)
-            UnpinWindow(_lastPinnedHwnd);
+            UnpinWindow(_lastPinnedHwnd, "unpin-last");
     }
 
     /// <summary>供自检：指定窗口的悬浮图标是否真实存在且可见。</summary>
@@ -268,6 +320,7 @@ internal sealed class PinManager : IDisposable
         if (evt == EVENT_OBJECT_DESTROY)
         {
             // 目标窗口销毁：此刻窗口已不可用，只做自身状态清理
+            DiagLog.Write(string.Format("target 0x{0:X} destroyed", hwnd.ToInt64()));
             RemoveEntry(hwnd);
             return;
         }
@@ -322,7 +375,8 @@ internal sealed class PinManager : IDisposable
         // 置顶请求在途时跳过：位尚未置上是正常中间态，不代表用户取消。
         if (!entry.TopmostPending && (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) == 0)
         {
-            UnpinWindow(hwnd);
+            DiagLog.Write(string.Format("pin 0x{0:X}: topmost bit cleared externally", hwnd.ToInt64()));
+            UnpinWindow(hwnd, "topmost-bit-cleared");
             return;
         }
 
@@ -457,7 +511,7 @@ internal sealed class PinManager : IDisposable
     // ---------------- 悬浮图标回调 ----------------
 
     /// <summary>悬浮图标被点击（缩小动画已完成）→ 取消对应窗口置顶并关闭图标。</summary>
-    internal void OnOverlayClicked(IntPtr hwnd) => UnpinWindow(hwnd);
+    internal void OnOverlayClicked(IntPtr hwnd) => UnpinWindow(hwnd, "overlay-click");
 
     /// <summary>悬浮图标 DPI 变化（跨显示器拖动）→ 重算物理尺寸与位置。</summary>
     internal void OnOverlayDpiChanged(IntPtr hwnd)
